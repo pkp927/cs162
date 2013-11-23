@@ -284,8 +284,9 @@ public class KThread {
 	    joinQueue.acquire(currentThread);
 	    joinQueue.waitForAccess(currentThread); //Puts parent/current thread onto this thread's joinQueue
 	    System.out.println("join "+currentThread.name);
+	    this.joined = true;
 	    sleep(); //Sleeps parent/current thread
-	
+	    System.out.println("join finish");
 	    Machine.interrupt().restore(intStatus); 
 
     }
@@ -317,7 +318,13 @@ public class KThread {
      * using <tt>run()</tt>.
      */
     private static void runNextThread() {
-	KThread nextThread = readyQueue.nextThread();
+    KThread nextThread;
+    if(currentThread.joined && currentThread.status == statusFinished){
+    	currentThread.joined = false;
+    	nextThread = currentThread.joinQueue.nextThread();
+    }else{
+    	nextThread = readyQueue.nextThread();
+    }
 	if (nextThread == null)
 	    nextThread = idleThread;
 
@@ -414,12 +421,14 @@ public class KThread {
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
 	
-	//new KThread(new PingTest(1)).setName("forked thread").fork();
+	KThread t =new KThread(new PingTest(1)).setName("forked thread");
+	t.fork();
+	t.join();
 	//new PingTest(0).run();
 	//test1();
 	//Condition2.selfTest();
 	//Alarm.selfTest();
-	Communicator.selfTest();
+	//Communicator.selfTest();
     }
     private static void test1(){
     	KThread joineeZ = new KThread(new Joinee()).setName("JoineeZ");
@@ -489,6 +498,7 @@ public class KThread {
     private static KThread currentThread = null;
     private static KThread toBeDestroyed = null;
     private static KThread idleThread = null;
+    private boolean joined=false;
 
     private ThreadQueue joinQueue = ThreadedKernel.scheduler.newThreadQueue(true);
 }
