@@ -273,9 +273,20 @@ public class KThread {
      * thread.
      */
     public void join() {
-	Lib.debug(dbgThread, "Joining to thread: " + toString());
-
-	Lib.assertTrue(this != currentThread);
+		Lib.debug(dbgThread, "Joining to thread: " + toString());
+	
+		Lib.assertTrue(this != currentThread);
+		
+		boolean intStatus = Machine.interrupt().disable(); //Must be atomic
+	
+	    if (status == statusFinished) { return;} //You cannot join to a finished thread
+	    if (status == statusNew) { this.ready();} //New threads must be placed onto ready queue
+	    joinQueue.acquire(currentThread);
+	    joinQueue.waitForAccess(currentThread); //Puts parent/current thread onto this thread's joinQueue
+	    System.out.println("join "+currentThread.name);
+	    sleep(); //Sleeps parent/current thread
+	
+	    Machine.interrupt().restore(intStatus); 
 
     }
 
@@ -403,8 +414,39 @@ public class KThread {
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
 	
-	new KThread(new PingTest(1)).setName("forked thread").fork();
-	new PingTest(0).run();
+	//new KThread(new PingTest(1)).setName("forked thread").fork();
+	//new PingTest(0).run();
+	test1();
+    }
+    private static void test1(){
+    	KThread joineeZ = new KThread(new Joinee()).setName("JoineeZ");
+        KThread joinerY = new KThread(new Joiner(joineeZ)).setName("JoinerY");
+        KThread joinerX = new KThread(new Joiner(joineeZ)).setName("JoinerX");
+        System.out.println("\n-- x and y join on z; z must finishs first then either x or y finishes--");
+        joinerX.fork();
+        joineeZ.fork();
+        joinerY.fork();
+        System.out.println("hi "+currentThread.name);
+    }
+    
+    private static class Joiner implements Runnable {
+            private KThread joinee;
+
+            Joiner(KThread joiNee){
+                    joinee = joiNee;
+            }
+
+            public void run(){
+                    System.out.println("Joiner "+currentThread.name+": before joining " + joinee.getName());
+                    joinee.join();
+                    System.out.println("Joiner "+currentThread.name+": after joining " + joinee.getName());
+            }
+    }
+
+    private static class Joinee implements Runnable {
+            public void run(){
+                    System.out.println("Joinee: Happy running");
+            }
     }
 
     private static final char dbgThread = 't';
@@ -444,4 +486,6 @@ public class KThread {
     private static KThread currentThread = null;
     private static KThread toBeDestroyed = null;
     private static KThread idleThread = null;
+
+    private ThreadQueue joinQueue = ThreadedKernel.scheduler.newThreadQueue(true);
 }
