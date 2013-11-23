@@ -418,7 +418,8 @@ public class KThread {
 	//new PingTest(0).run();
 	//test1();
 	//Condition2.selfTest();
-	Alarm.selfTest();
+	//Alarm.selfTest();
+	Communicator.selfTest();
     }
     private static void test1(){
     	KThread joineeZ = new KThread(new Joinee()).setName("JoineeZ");

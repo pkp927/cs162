@@ -14,6 +14,9 @@ public class Communicator {
      * Allocate a new communicator.
      */
     public Communicator() {
+    	conditionLock = new Lock();
+    	conds = new Condition(conditionLock);
+    	condl = new Condition(conditionLock);
     }
 
     /**
@@ -27,6 +30,12 @@ public class Communicator {
      * @param	word	the integer to transfer.
      */
     public void speak(int word) {
+    	conditionLock.acquire();
+    	while(datas != -1) conds.sleep();
+    	datas = word;
+    	System.out.println(KThread.currentThread().getName()+" spoke "+datas);
+    	condl.wake();
+    	conditionLock.release();
     }
 
     /**
@@ -36,6 +45,55 @@ public class Communicator {
      * @return	the integer transferred.
      */    
     public int listen() {
-	return 0;
+    	conditionLock.acquire();
+    	conds.wake();
+    	while(datas == -1) condl.sleep();
+    	datal = datas;
+    	System.out.println(KThread.currentThread().getName()+" listened "+datal);
+    	datas = -1;
+    	conditionLock.release();
+    	return datal;
     }
+    
+    public static void selfTest(){
+    	final Communicator com = new Communicator();
+    	
+    	KThread t1 = new KThread(new Runnable(){
+    		public void run(){
+    			com.speak(1);
+    		}
+    	}).setName("t1");
+    	KThread t2 = new KThread(new Runnable(){
+    		public void run(){
+    			com.listen();
+    		}
+    	}).setName("t2");
+    	KThread t3 = new KThread(new Runnable(){
+    		public void run(){
+    			com.speak(3);
+    		}
+    	}).setName("t3");
+    	KThread t4 = new KThread(new Runnable(){
+    		public void run(){
+    			com.listen();
+    		}
+    	}).setName("t4");
+    	KThread t5 = new KThread(new Runnable(){
+    		public void run(){
+    			com.speak(5);
+    		}
+    	}).setName("t5");
+    	
+    	t1.fork();
+    	t2.fork();
+    	t3.fork();
+    	t4.fork();
+    	t5.fork();
+    }
+
+    private Lock conditionLock;
+    private Condition condl;
+    private Condition conds;
+    private int datas = -1;
+    private int datal = -1;
 }
