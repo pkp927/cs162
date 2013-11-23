@@ -1,5 +1,7 @@
 package nachos.threads;
 
+import java.util.TreeMap;
+
 import nachos.machine.*;
 
 /**
@@ -27,7 +29,15 @@ public class Alarm {
      * that should be run.
      */
     public void timerInterrupt() {
-	KThread.currentThread().yield();
+	//KThread.currentThread().yield();
+    	boolean intStatus = Machine.interrupt().disable();
+    	if(!list.isEmpty()){
+    		if(list.firstKey() <= Machine.timer().getTime()){
+    			KThread t = list.pollFirstEntry().getValue();
+    			t.ready();
+    			System.out.println("Thread "+t.getName()+" is ready at "+Machine.timer().getTime());
+    		}
+    	} 
     }
 
     /**
@@ -47,7 +57,37 @@ public class Alarm {
     public void waitUntil(long x) {
 	// for now, cheat just to get something working (busy waiting is bad)
 	long wakeTime = Machine.timer().getTime() + x;
-	while (wakeTime > Machine.timer().getTime())
-	    KThread.yield();
+	boolean intStatus = Machine.interrupt().disable();
+	wakeTime = Machine.timer().getTime() + x;
+	System.out.println("Thread "+KThread.currentThread().getName()+" is going to sleep until "+wakeTime+" ticks");
+	list.put(wakeTime,KThread.currentThread());
+	KThread.sleep();
+	Machine.interrupt().restore(intStatus);
+	//while (wakeTime > Machine.timer().getTime())
+	  //  KThread.yield();
     }
+
+    public static void selfTest(){
+    	KThread t1 = new KThread(new Runnable(){
+			public void run() {
+				long ticks = 40;
+				System.out.println(KThread.currentThread().getName() + " before sleep "+Machine.timer().getTime());
+				ThreadedKernel.alarm.waitUntil(ticks);
+				System.out.println(KThread.currentThread().getName() + " after sleep "+Machine.timer().getTime());
+			}
+    	}).setName("t1"); 
+    	KThread t2 = new KThread(new Runnable(){
+			public void run() {
+				long ticks = 800;
+				System.out.println(KThread.currentThread().getName() + " before sleep "+Machine.timer().getTime());
+				ThreadedKernel.alarm.waitUntil(ticks);
+				System.out.println(KThread.currentThread().getName() + " after sleep "+Machine.timer().getTime());
+			}
+    	}).setName("t2"); 
+    	t1.fork();
+    	t2.fork();
+    }
+    
+    private long wakeTime;
+    private TreeMap<Long,KThread> list = new TreeMap<Long,KThread>();
 }

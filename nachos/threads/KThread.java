@@ -417,7 +417,8 @@ public class KThread {
 	//new KThread(new PingTest(1)).setName("forked thread").fork();
 	//new PingTest(0).run();
 	//test1();
-	Condition2.selfTest();
+	//Condition2.selfTest();
+	Alarm.selfTest();
     }
     private static void test1(){
     	KThread joineeZ = new KThread(new Joinee()).setName("JoineeZ");
