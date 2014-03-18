@@ -1,5 +1,7 @@
 package nachos.threads;
 
+import java.util.Random;
+
 import nachos.machine.*;
 
 /**
@@ -47,7 +49,7 @@ public class KThread {
 	    tcb = new TCB();
 	}	    
 	else {
-	    readyQueue = ThreadedKernel.scheduler.newThreadQueue(false);
+	    readyQueue = ThreadedKernel.scheduler.newThreadQueue(true);
 	    readyQueue.acquire(this);	    
 
 	    currentThread = this;
@@ -165,7 +167,8 @@ public class KThread {
 	Lib.debug(dbgThread, "Beginning thread: " + toString());
 	
 	Lib.assertTrue(this == currentThread);
-
+	
+	//readyQueue.print();
 	restoreState();
 
 	Machine.interrupt().enable();
@@ -320,8 +323,11 @@ public class KThread {
     private static void runNextThread() {
     KThread nextThread;
     if(currentThread.joined && currentThread.status == statusFinished){
-    	currentThread.joined = false;
     	nextThread = currentThread.joinQueue.nextThread();
+    	KThread nextnextThread;
+    	while((nextnextThread=currentThread.joinQueue.nextThread()) != null){
+    		readyQueue.waitForAccess(nextnextThread);
+    	}
     }else{
     	nextThread = readyQueue.nextThread();
     }
@@ -420,21 +426,139 @@ public class KThread {
      */
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
-	
-	KThread t =new KThread(new PingTest(1)).setName("forked thread");
-	t.fork();
-	t.join();
+
+	//KThread t =new KThread(new PingTest(1)).setName("forked thread");
+	//t.fork();
+	//t.join();
 	//new PingTest(0).run();
 	//test1();
 	//Condition2.selfTest();
 	//Alarm.selfTest();
 	//Communicator.selfTest();
+	//schedulingTest();
+	//priorityTest();
+	//Boat.selfTest();
     }
+    
+    /*
+     * it creates 3 threads but one with higher priority
+     * which when runs half has its priority decreased 
+     * so that other threads with more waiting time runs
+     */
+    private static void schedulingTest(){
+    	KThread t1 = new KThread(new Schedule()).setName("t1");
+    	KThread t2 = new KThread(new Schedule()).setName("t2");
+    	KThread t3 = new KThread(new Schedule()).setName("t3");
+    	// t1 on readyQueue
+    	t1.fork();
+    	// t2 on readyQueue
+    	t2.fork();
+        boolean intStatus = Machine.interrupt().disable(); 
+    	ThreadedKernel.scheduler.setPriority(t2, 4); 
+        Machine.interrupt().restore(intStatus);
+        // t3 on readyQueue
+    	t3.fork();
+    	
+        intStatus = Machine.interrupt().disable(); 
+        readyQueue.print();
+        Machine.interrupt().restore(intStatus);
+    }
+    
+    private static class Schedule implements Runnable{
+
+		public void run() {
+			System.out.println("hi "+currentThread.name);
+			
+	    	if(currentThread.name.equals("t2")){
+		        boolean intStatus = Machine.interrupt().disable(); 
+	    		ThreadedKernel.scheduler.setPriority(currentThread, 1);
+		        Machine.interrupt().restore(intStatus);
+	    	}
+	        
+	        currentThread.yield();
+			System.out.println("hi on "+currentThread.name);
+		}
+    	
+    }
+    
+   /*
+    * it creates 3 threads with low high medium priorities
+    * high priority thread runs first  and it runs half 
+    * when its priority is decreased to lowest.
+    * high(lowest) and medium share same lock
+    * so medium needs to wait for low as
+    * lock is held by high(lowest)
+    */
+    public static void priorityTest() {
+    	
+    	Lock lock = new Lock();
+    	Lock slock = new Lock();
+    	
+    	KThread t1 = new KThread(new priority(slock)).setName("medium");
+    	KThread t2 = new KThread(new priority(slock)).setName("high");
+    	KThread t3 = new KThread(new priority(lock)).setName("low");
+    
+    	// t1 on readyQueue
+    	t1.fork();
+        boolean intStatus = Machine.interrupt().disable(); 
+    	ThreadedKernel.scheduler.setPriority(t1, 4);
+        Machine.interrupt().restore(intStatus);
+    	// t2 on readyQueue
+    	t2.fork();
+        intStatus = Machine.interrupt().disable(); 
+    	ThreadedKernel.scheduler.setPriority(t2, 5); 
+        Machine.interrupt().restore(intStatus);
+        // t3 on readyQueue
+    	t3.fork();
+        intStatus = Machine.interrupt().disable(); 
+    	ThreadedKernel.scheduler.setPriority(t3, 3); 
+        Machine.interrupt().restore(intStatus);
+    	
+    }
+    
+    private static class priority implements Runnable{
+    	
+    	Lock lock;
+    	
+    	priority(Lock l){
+    		lock = l;
+    	}
+
+		public void run() {
+	        boolean intStatus = Machine.interrupt().disable(); 
+			System.out.println("\nname is "+currentThread.name+"-"+ThreadedKernel.scheduler.getPriority(currentThread));
+			//readyQueue.print(); 
+	        Machine.interrupt().restore(intStatus);
+			lock.acquire();
+			for(int i=0;i<2;i++){
+		        intStatus = Machine.interrupt().disable();
+				System.out.println("in while "+currentThread.name+"-"+ThreadedKernel.scheduler.getPriority(currentThread));
+		        Machine.interrupt().restore(intStatus);
+				if(currentThread.name.equals("high")){
+			        intStatus = Machine.interrupt().disable(); 
+			    	ThreadedKernel.scheduler.setPriority(currentThread, 1); 
+			        Machine.interrupt().restore(intStatus);
+				}
+				currentThread.yield();
+			}
+	        intStatus = Machine.interrupt().disable();
+			System.out.println("out "+currentThread.name+"-"+ThreadedKernel.scheduler.getPriority(currentThread)+"\n");
+	        Machine.interrupt().restore(intStatus);
+			lock.release();
+		}
+    	
+    }
+    
     private static void test1(){
     	KThread joineeZ = new KThread(new Joinee()).setName("JoineeZ");
         KThread joinerY = new KThread(new Joiner(joineeZ)).setName("JoinerY");
         KThread joinerX = new KThread(new Joiner(joineeZ)).setName("JoinerX");
         System.out.println("\n-- x and y join on z; z must finishs first then either x or y finishes--");
+        /*boolean intStatus = Machine.interrupt().disable(); 
+    	ThreadedKernel.scheduler.setPriority(joineeZ, 4); 
+    	ThreadedKernel.scheduler.setPriority(joinerY, 5);
+    	ThreadedKernel.scheduler.setPriority(joinerX, 4);
+        Machine.interrupt().restore(intStatus);  */
         joinerX.fork();
         joineeZ.fork();
         joinerY.fork();

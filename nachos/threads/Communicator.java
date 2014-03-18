@@ -83,7 +83,14 @@ public class Communicator {
     			com.speak(5);
     		}
     	}).setName("t5");
-    	
+    	/*
+    	Machine.interrupt().disable();
+    	ThreadedKernel.scheduler.setPriority(t5, 2);
+    	ThreadedKernel.scheduler.setPriority(t4, 2);
+    	ThreadedKernel.scheduler.setPriority(t3, 5);
+    	ThreadedKernel.scheduler.setPriority(t2, 2);
+    	Machine.interrupt().enable();
+    	*/
     	t1.fork();
     	t2.fork();
     	t3.fork();
