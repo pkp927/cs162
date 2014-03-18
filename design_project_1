@@ -1,0 +1,127 @@
+Part1 : join method of Kthread class
+
+	Kthread class will have joinQueue ( ThreadQueue) where parent of currentThread is kept. It will have variable joined ( Boolean) which is true if thread is joined on other thread. As the operation must be atomic so interrupts are disabled before starting and enabled after ending.  
+	You cannot join to a finished thread.
+	New threads must be placed onto ready queue
+	Puts parent/current thread onto this thread's joinQueue
+	Sleeps parent/current thread
+	When joined thread finishes, thread on joinQueue is run
+
+	implementation of join():
+	join(){
+		if(status == statusFinished) return;
+		if(status == statusNew) this.ready();
+		joinQueue.acquire(currentThread);
+		joinQueue.waitForAccess(currentThread);
+		this.joined = true;
+		sleep();
+	}
+
+	changes in runNextThread():
+	runNextThread(){
+	   if(currentThread.joined && currentThread.status == statusFinished){
+	    	currentThread.joined = false;
+	    	nextThread = currentThread.joinQueue.nextThread();
+	    }
+	}
+
+
+
+Part2 : Implement condition variables
+
+	Condition2 class has 3 methods: sleep(), wake() and wakeAll(). It will have variable conditionLock( Lock) to provide atomicity, waitQueue ( LinkedList) for waiting threads on a condition. Before sleeping lock is released.
+
+	implementation of sleep():
+	sleep(){
+	    waitQueue.add(KThread.currentThread());
+	     KThread.sleep();
+	}
+
+	implementation of wake():
+	wake(){
+	 if(!waitQueue.isEmpty() && waitQueue.peek() != null) {          
+	 	waitQueue.poll().ready();
+	 }
+	}
+
+	Similarly wakeAll() will wake all threads out of waitQueue.
+
+
+
+Part3 : Implement Alarm
+
+	Alarm class will have list ( TreeMap<Long,KThread>) to keep waiting threads mapped with there waiting time. waitUntil(Long) adds thread to this list. TimerInterrupt() checks after every 500 ticks if there is any thread whose waiting time has finished and put it on readyQueue.
+
+	implementation of waitUntil(Long):
+	waitUntil(Long x){
+		long wakeTime = Machine.timer().getTime() + x;
+		list.put(wakeTime,KThread.currentThread());
+		KThread.sleep();
+	}
+
+	implementation of timerInterrupt():
+	timerInterrupt(){
+		if(list.firstKey() <= Machine.timer().getTime()){
+	  		KThread t = list.pollFirstEntry().getValue();
+	    		t.ready();
+	    	}
+	}
+
+
+
+Part4 : Implement Communicator
+
+	Communicator class will have conditionLock (Lock) for atomicity, condl and conds (Condition) for having inner waiting queues for listeners and speakers , datal and datas for data listened and spoken. 
+	For speaker, if speaks then if data is already there then it sleeps else speak out and wake up a listener to listen.
+	speak(int word){
+		while(datas != -1) conds.sleep();
+	    	datas = word;
+	    	condl.wake();
+	}
+	For listener, it wakes up a speaker and listens for data if there else sleep.
+	listen(){
+		conds.wake();
+	    	while(datas == -1) condl.sleep();
+	    	datal = datas;
+	    	datas = -1;
+	}
+
+
+
+Part 5: Implement Priority Scheduler
+
+	PriorityScheduler class implements a priority queue using PriorityQueue class which stores threads as ThreadState objects according to their priorities. 
+	ThreadState class contains following information about a thread:
+	thread(KThread)
+	priority(int) and effectivePriority(int)
+	waitingTime(int)
+	waitingOn(PriorityQueue) – it is the priority queue of resource for which the thread is waiting to have an access
+	myResources(LinkedList<PriorityQueue>) - it is the list of priority queues of resources which the thread has acquired 
+	PriorityQueue class has following information:
+	java.util.PriorityQueue<ThreadState> - it contained threads sorted according to their priorities defined in the ThreadComparator class
+	transferPriority(boolean)
+	highestPriority(int)
+	running(KThread) – it is the thread which is currently running on the resource represented by that queue
+
+	Solution to priority inversion (Priority inheritance) -
+
+	Priority inversion occurs in the following scenario:
+		       readyQueue					lockQueue
+		            |3|2|1|				1(lock acquired)	|3|  |
+	3(acquires but then |2|1|  |                            1(lock acquired)	|3|  |
+	waits for lock)	 
+	2(acquires) 	    |1|  |  |				1(lock acquired)	|3|  |
+	Now:
+	ThreadState1				ThreadState3
+	waitingOn = readyQueue			waitingOn = lockQueue
+	waitingOn.running = 2			waitingOn.running = 1
+	myResources = lockQueue 		myResources = readyQueue
+
+	3 waits till 1 acquires readyQueue resource and finishes to free the lock even though 3 had highest priority.
+	To avoid this situation 3 can donate its priority to 1 to let it finish before 2 so as to release the lock.
+	In the above example 3 waits on lockQueue whose running thread is waiting on its other acquired resource i.e. readyQueue. So to donate priority whenever a thread waits on a resource it will check thread state of the running thread of that resource for its priority and update its effective priority.
+
+
+Part 6: Implement Boat Problem
+
+Adult will row only from Oahu to Molokai and not backwards as that is useless. Child rows another child to Molokai from Oahu and child rows from Molokai to Oahu to take the boat back to Oahu. Send all the children from Oahu to Molokai till only one remains at Oahu and then send adults to Molokai from where child rows back to Oahu. The loop of child rowing to Molokai and back to Oahu continues till the end.
